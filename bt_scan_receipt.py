@@ -1,12 +1,7 @@
-# import the necessary packages
-#from imutils.perspective import four_point_transform
 import pytesseract
-import argparse
-import imutils
 import cv2
 import re
 import os
-from PIL import Image
 import json
 
 def deleteFiles(path):
@@ -50,19 +45,20 @@ def extractSupplierVKN(receiptTxt):
 
 def extractTaxAmount(receiptTxt):
     for row in receiptTxt.split("\n"):
-        taxAmountPattern = r'([0-9]+\.[0-9]+)'
+        taxAmountPattern = r'TOPKDV*(\d[\d.,]*)'
         if re.search(taxAmountPattern, row) is not None:
             return row
     return "bilemedim"
 
 def extractTotalAmount(receiptTxt):
     for row in receiptTxt.split("\n"):
-        totalAmountPattern = r'([0-9]+\.[0-9]+)'
-        if re.search(totalAmountPattern, row) is not None:
+        totalAmountPattern = r'TOPLA*(\d[\d.,]*)'
+        if re.findall(totalAmountPattern, row) is not None:
             return row
     return "bilemedim"
 
 def extractCurrencyCode(receiptTxt):
+    return "TRY"
     for row in receiptTxt.split("\n"):
         currencyCodePattern = r'([0-9]+\.[0-9]+)'
         if re.search(currencyCodePattern, row) is not None:
