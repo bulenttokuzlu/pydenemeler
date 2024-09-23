@@ -70,9 +70,8 @@ def extractCurrencyCode(receiptTxt):
     return "bilemedim"
 
 def extractAttributes(txtFile):
-    receiptTxt=""
-    txt = open(txtFile, "w")
-    txt.read(receiptTxt)
+    txt = open(txtFile, "r")
+    receiptTxt = txt.read()
     txt.close()
     value = {
         "supplierName": extractSupplierName(receiptTxt),
