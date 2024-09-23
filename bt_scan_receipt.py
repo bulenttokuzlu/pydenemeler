@@ -6,6 +6,8 @@ import imutils
 import cv2
 import re
 import os
+from PIL import Image
+import json
 
 def deleteFiles(path):
     # Check if the file exists before attempting to delete it
@@ -14,155 +16,88 @@ def deleteFiles(path):
         os.remove(path+"/"+file)
         print(f"The file {file} has been deleted.")
 
-if __name__ == '__main__':
-    deleteFiles('Rotated')
-    path = "Faturalar"
-    dir_list = os.listdir(path)
-    print("Files and directories in '", path, "' :")
-
-    for files in dir_list:
-        f = files.split(".")
+def readReceipts(srcPath, trgtPath):
+    dir_list = os.listdir(srcPath)
+    for receiptFile in dir_list:
+        f = receiptFile.split(".")
         if f[-1] == "jpg":
-            jpegFile = "Faturalar/" + f[0] + ".jpg"
-            rotatedJpegFile = "Rotated/" + f[0] + "_r.jpg"
-            txtFile = "Text/" + f[0] + ".txt"
+            jpegFile = srcPath + "/" + f[0] + ".jpg"
+            txtFile = trgtPath + "/" + f[0] + ".txt"
             print("[INFO] reading image file {} ".format(jpegFile))
-            image = cv2.imread(jpegFile)
-            angle, corrected = correct_skew(image)
-            print('Skew angle:', angle)
-            cv2.imwrite(rotatedJpegFile, corrected)
-
-    deleteFiles('Text')
-    path = "Rotated"
-    dir_list = os.listdir(path)
-    print("Files and directories in '", path, "' :")
-    # prints all files
-    # print(dir_list)
-
-    for files in dir_list:
-        f = files.split(".")
-        if f[-1] == "jpg":
-            jpegFile = path + "/" + f[0] + ".jpg"
-            txtFile = "Text/" + f[0] + ".txt"
-            print("[INFO] reading image file {} ".format(jpegFile))
-            image = Image.open(jpegFile)
+            receipt = cv2.imread(jpegFile)
+            options = "--psm 4"
+            receiptTxt = pytesseract.image_to_string(
+                image=cv2.cvtColor(receipt, cv2.COLOR_BGR2RGB),
+                lang="tur",
+                config=options)
             txt = open(txtFile, "w")
-            txt.write(pytesseract.image_to_string(image=image, lang="tur"))
+            txt.write(receiptTxt)
             txt.close()
 
+def extractSupplierName(receiptTxt):
+    for row in receiptTxt.split("\n"):
+        supplierNamePattern = r'([0-9]+\.[0-9]+)'
+        if re.search(supplierNamePattern, row) is not None:
+            return row
+    return "bilemedim"
+
+def extractSupplierVKN(receiptTxt):
+    for row in receiptTxt.split("\n"):
+        supplierVKNPattern = r'([0-9]+\.[0-9]+)'
+        if re.search(supplierVKNPattern, row) is not None:
+            return row
+    return "bilemedim"
+
+def extractTaxAmount(receiptTxt):
+    for row in receiptTxt.split("\n"):
+        taxAmountPattern = r'([0-9]+\.[0-9]+)'
+        if re.search(taxAmountPattern, row) is not None:
+            return row
+    return "bilemedim"
+
+def extractTotalAmount(receiptTxt):
+    for row in receiptTxt.split("\n"):
+        totalAmountPattern = r'([0-9]+\.[0-9]+)'
+        if re.search(totalAmountPattern, row) is not None:
+            return row
+    return "bilemedim"
+
+def extractCurrencyCode(receiptTxt):
+    for row in receiptTxt.split("\n"):
+        currencyCodePattern = r'([0-9]+\.[0-9]+)'
+        if re.search(currencyCodePattern, row) is not None:
+            return row
+    return "bilemedim"
+
+def extractAttributes(txtFile):
+    receiptTxt=""
+    txt = open(txtFile, "w")
+    txt.read(receiptTxt)
+    txt.close()
+    value = {
+        "supplierName": extractSupplierName(receiptTxt),
+        "supplierVKN": extractSupplierVKN(receiptTxt),
+        "taxAmount": extractTaxAmount(receiptTxt),
+        "totalAmount": extractTotalAmount(receiptTxt),
+        "currencyCode": extractCurrencyCode(receiptTxt)
+    }
+    return json.dumps(value)
+
+def createJsonFiles(srcPath, trgtPath):
+    dir_list = os.listdir(srcPath)
+    for receiptFile in dir_list:
+        f = receiptFile.split(".")
+        if f[-1] == "txt":
+            txtFile = srcPath + "/" + f[0] + ".txt"
+            jsonFile = trgtPath + "/" + f[0] + ".json"
+            f = open(jsonFile, "w")
+            f.write(extractAttributes(txtFile))
+            f.close()
+
+if __name__ == '__main__':
+    #deleteFiles('Text')
+    deleteFiles('Json')
+    #readReceipts('Faturalar','Text')
+    createJsonFiles('Text','Json')
 
 
-
-# construct the argument parser and parse the arguments
-ap = argparse.ArgumentParser()
-ap.add_argument("-i", "--image", required=True,
-	help="path to input receipt image")
-ap.add_argument("-d", "--debug", type=int, default=-1,
-	help="whether or not we are visualizing each step of the pipeline")
-args = vars(ap.parse_args())
-
-# load the input image from disk, resize it, and compute the ratio
-# of the *new* width to the *old* width
-orig = cv2.imread(args["image"])
-image = orig.copy()
-image = imutils.resize(image, width=500)
-ratio = orig.shape[1] / float(image.shape[1])
-#ratio=100
-
-# convert the image to grayscale, blur it slightly, and then apply
-# edge detection
-gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-blurred = cv2.GaussianBlur(gray, (5, 5,), 0)
-edged = cv2.Canny(blurred, 75, 200)
-# check to see if we should show the output of our edge detection
-cv2.imshow("image", image)
-cv2.waitKey(0)
-cv2.imshow("gray", gray)
-cv2.waitKey(0)
-cv2.imshow("blurred", blurred)
-cv2.waitKey(0)
-cv2.imshow("edged", edged)
-cv2.waitKey(0)
-
-# procedure
-if args["debug"] > 0:
-	cv2.imshow("Input", image)
-	cv2.imshow("Edged", edged)
-	cv2.waitKey(0)
-
-# find contours in the edge map and sort them by size in descending
-# order
-cnts = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-						#cv2.CHAIN_APPROX_TC89_L1)
-	#cv2.CHAIN_APPROX_SIMPLE)
-cnts = imutils.grab_contours(cnts)
-cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
-
-# initialize a contour that corresponds to the receipt outline
-receiptCnt = None
-
-# loop over the contours
-for c in cnts:
-	# approximate the contour
-	peri = cv2.arcLength(c, True)
-	approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-
-	# if our approximated contour has four points, then we can
-	# assume we have found the outline of the receipt
-	if len(approx) == 4:
-		receiptCnt = approx
-		break
-
-# if the receipt contour is empty then our script could not find the
-# outline and we should be notified
-if receiptCnt is None:
-	raise Exception(("Could not find receipt outline. "
-		"Try debugging your edge detection and contour steps."))
-
-# check to see if we should draw the contour of the receipt on the
-# image and then display it to our screen
-if args["debug"] > 0:
-	output = image.copy()
-	cv2.drawContours(output, [receiptCnt], -1, (0, 255, 0), 2)
-	cv2.imshow("Receipt Outline", output)
-	cv2.waitKey(0)
-
-# apply a four-point perspective transform to the *original* image to
-# obtain a top-down bird's-eye view of the receipt
-#receipt = four_point_transform(orig, receiptCnt.reshape(4, 2) * ratio)
-receipt = orig.copy()
-
-# show transformed image
-cv2.imshow("Receipt Transform", imutils.resize(receipt, width=500))
-cv2.waitKey(0)
-
-# apply OCR to the receipt image by assuming column data, ensuring
-# the text is *concatenated across the row* (additionally, for your
-# own images you may need to apply additional processing to cleanup
-# the image, including resizing, thresholding, etc.)
-options = "--psm 4"
-text = pytesseract.image_to_string(
-	cv2.cvtColor(receipt, cv2.COLOR_BGR2RGB),lang="tur",
-	config=options)
-
-# show the raw output of the OCR process
-print("[INFO] raw output:")
-print("==================")
-print(text)
-print("\n")
-
-# define a regular expression that will match line items that include
-# a price component
-pricePattern = r'([0-9]+\.[0-9]+)'
-
-# show the output of filtering out *only* the line items in the
-# receipt
-print("[INFO] price line items:")
-print("========================")
-
-# loop over each of the line items in the OCR'd receipt
-for row in text.split("\n"):
-	# check to see if the price regular expression matches the current
-	# row
-	if re.search(pricePattern, row) is not None:
-		print(row)

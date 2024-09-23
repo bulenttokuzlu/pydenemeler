@@ -9,3 +9,5 @@ pip3 install opencv-python
 
 python3 scan_receipt.py --image Faturalar/20240905_100141.jpg --debug 1
 
+python3 bt_scan_receipt.py
+
